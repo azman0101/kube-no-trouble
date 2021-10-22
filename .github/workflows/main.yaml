@@ -59,6 +59,32 @@ jobs:
         with:
           name: release-artifacts-${{ matrix.os }}-${{ matrix.arch }}
           path: release-artifacts
+  virus-scan:
+    name: virus-scan
+    needs:
+      [build]
+    runs-on: ubuntu-latest
+    container: openbridge/clamav
+    strategy:
+      matrix:
+        os: [linux, darwin, windows]
+        arch: [arm64, amd64]
+        exclude:
+          - os: windows
+            arch: arm64
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v1
+      with:
+        fetch-depth: 1
+    - uses: actions/download-artifact@v1
+      with:
+        name: release-artifacts-${{ matrix.os }}-${{ matrix.arch }}
+        path: release-artifacts
+    - name: run virus scan
+      run: |
+        tar xvzf release-artifacts/kubent-*-${{ matrix.os }}-${{ matrix.arch }}.tar.gz
+        /usr/bin/clamdscan kubent*
   integration-test:
     name: integration test
     needs:
