@@ -4,7 +4,7 @@ main[return] {
 	resource := input[_]
 	api := deprecated_resource(resource)
 	return := {
-		"Name": resource.metadata.name,
+		"Name": get_default(resource.metadata, "name", "<undefined>"),
 		# Namespace does not have to be defined in case of local manifests
 		"Namespace": get_default(resource.metadata, "namespace", "<undefined>"),
 		"Kind": resource.kind,
@@ -41,7 +41,7 @@ deprecated_api(kind, api_version) = api {
 			"new": "discovery.k8s.io/v1",
 			"since": "1.21",
 		},
-		"CronJobs": {
+		"CronJob": {
 			"old": ["batch/v1beta1"],
 			"new": "batch/v1",
 			"since": "1.21",
