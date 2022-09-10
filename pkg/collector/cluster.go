@@ -2,6 +2,7 @@ package collector
 
 import (
 	"encoding/json"
+
 	"github.com/rs/zerolog/log"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -27,8 +28,8 @@ type ClusterOpts struct {
 	DiscoveryClient discovery.DiscoveryInterface
 }
 
-func NewClusterCollector(opts *ClusterOpts, additionalKinds []string) (*ClusterCollector, error) {
-	kubeCollector, err := newKubeCollector(opts.Kubeconfig, opts.KubeContext, opts.DiscoveryClient)
+func NewClusterCollector(opts *ClusterOpts, additionalKinds []string, userAgent string) (*ClusterCollector, error) {
+	kubeCollector, err := newKubeCollector(opts.Kubeconfig, opts.KubeContext, opts.DiscoveryClient, userAgent)
 	if err != nil {
 		return nil, err
 	}
@@ -98,6 +99,9 @@ func (c *ClusterCollector) Get() ([]map[string]interface{}, error) {
 		schema.GroupVersionResource{Group: "policy", Version: "v1beta1", Resource: "podsecuritypolicies"},
 		schema.GroupVersionResource{Group: "discovery.k8s.io", Version: "v1", Resource: "endpointslices"},
 		schema.GroupVersionResource{Group: "batch", Version: "v1", Resource: "cronjobs"},
+		schema.GroupVersionResource{Group: "snapshot.storage.k8s.io", Version: "v1", Resource: "volumesnapshots"},
+		schema.GroupVersionResource{Group: "snapshot.storage.k8s.io", Version: "v1", Resource: "volumesnapshotclasses"},
+		schema.GroupVersionResource{Group: "snapshot.storage.k8s.io", Version: "v1", Resource: "volumesnapshotcontents"},
 	}
 	gvrs = append(gvrs, c.additionalResources...)
 

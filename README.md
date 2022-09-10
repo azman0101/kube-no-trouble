@@ -5,8 +5,8 @@ __*Easily check your clusters for use of deprecated APIs*__
 Kubernetes 1.16 is slowly starting to roll out, not only across various managed
 Kubernetes offerings, and with that come a lot of API deprecations[1][1].
 
-*Kube No Trouble (__`kubent`__)* is a simple tool to check whether you're using any
-of these API versions in your cluster and therefore should upgrade your
+*Kube No Trouble (__`kubent`__)* is a simple tool to check whether you're using
+any of these API versions in your cluster and therefore should upgrade your
 workloads first, before upgrading your Kubernetes cluster.
 
 This tool will be able to detect deprecated APIs depending on how you deploy
@@ -20,9 +20,9 @@ particular following tools are supported:
 [1]: https://kubernetes.io/blog/2019/07/18/api-deprecations-in-1-16/
 
 **Additional resources:**
-- Blog post on K8s deprecated APIs and introduction of kubent: [Kubernetes: How to automatically detect and deal with deprecated APIs][2]
+- Blog post on K8s deprecated APIs and introduction of kubent: [Kubernetes: Deprecated APIs aka Introducing Kube-No-Trouble][2]
 
-[2]: https://blog.doit-intl.com/kubernetes-how-to-automatically-detect-and-deal-with-deprecated-apis-f9a8fc23444c
+[2]: https://stepan.wtf/kubernetes-deprecated-apis-introducing-kubent/
 
 ## Install
 
@@ -41,7 +41,7 @@ Configure Kubectl's current context to point to your cluster, `kubent` will
 look for the kube `.config` file in standard locations (you can point it to custom
 location using the `-k` switch).
 
-**`kubent`** will collect resources from your cluster and report on found issuses.
+**`kubent`** will collect resources from your cluster and report on found issues.
 
 *Please note that you need to have sufficient permissions to read Secrets in the
 cluster in order to use `Helm*` collectors.*
@@ -98,7 +98,7 @@ Usage of ./kubent:
   Select context from kubeconfig file (`current-context` from the file is used by default).
 
 - *`k, --kubeconfig`*
-  Path to kubeconfig file to use. This takes precedence over `KUBECONFIG` environemnt variable, which is also supported
+  Path to kubeconfig file to use. This takes precedence over `KUBECONFIG` environment variable, which is also supported
   and can contain multiple paths, and default `~.kube/config`.
 
 - *`-t, --target-version`*
@@ -109,13 +109,15 @@ Usage of ./kubent:
 
 ### Use in CI
 
+#### Exit codes
+
 `kubent` will by default return `0` exit code if the program succeeds, even if
 it finds deprecated resources, and non-zero exit code if there is an error
 during runtime. Because all info output goes to stderr, it's easy to check in
 shell if any issues were found:
 
 ```shell
-test -z "$(kubent)"                 # if stdout output is empty, means no issuse were found
+test -z "$(kubent)"                 # if stdout output is empty, means no issues were found
                                     # equivalent to [ -z "$(kubent)" ]
 ```
 
@@ -138,6 +140,15 @@ empty:
 
 ```
 kubent -o json | jq -e 'length == 0'
+```
+
+#### Scanning all files in directory
+
+If you want to scan all files in a given directory, you can use the following
+shell snippet:
+
+```shell
+FILES=($(ls *.yaml)); kubent ${FILES[@]/#/-f} --helm2=false --helm3=false -c=false
 ```
 
 ## Development
@@ -184,7 +195,7 @@ Where type is one of:
 - **docs** - Documentation only change
 - **feat** - A new feature
 - **fix** - A bug fix
-- **ref** - Code refactoring without functinality change
+- **ref** - Code refactoring without functionality change
 - **style** - Formatting changes
 - **test** - Adding/changing tests
 
