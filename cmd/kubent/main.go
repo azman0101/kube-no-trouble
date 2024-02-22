@@ -1,7 +1,9 @@
 package main
 
 import (
+	"flag"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/doitintl/kube-no-trouble/pkg/collector"
@@ -16,6 +18,7 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth/azure"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/oidc"
+	"k8s.io/klog/v2"
 )
 
 var (
@@ -24,27 +27,28 @@ var (
 )
 
 const (
-	EXIT_CODE_SUCCESS      = 0
-	EXIT_CODE_FAIL_GENERIC = 1
-	EXIT_CODE_FOUND_ISSUES = 200
+	EXIT_CODE_SUCCESS             = 0
+	EXIT_CODE_FAIL_GENERIC        = 1
+	EXIT_CODE_FAIL_GET_COLLECTORS = 100
+	EXIT_CODE_FOUND_ISSUES        = 200
 )
 
 func generateUserAgent() string {
 	return fmt.Sprintf("kubent (%s/%s)", version, gitSha)
 }
 
-func getCollectors(collectors []collector.Collector) []map[string]interface{} {
+func getCollectors(collectors []collector.Collector) ([]map[string]interface{}, error) {
 	var inputs []map[string]interface{}
 	for _, c := range collectors {
 		rs, err := c.Get()
 		if err != nil {
 			log.Error().Err(err).Str("name", c.Name()).Msg("Failed to retrieve data from collector")
-		} else {
-			inputs = append(inputs, rs...)
-			log.Info().Str("name", c.Name()).Msgf("Retrieved %d resources from collector", len(rs))
+			return nil, err
 		}
+		inputs = append(inputs, rs...)
+		log.Info().Str("name", c.Name()).Msgf("Retrieved %d resources from collector", len(rs))
 	}
-	return inputs
+	return inputs, nil
 }
 
 func storeCollector(collector collector.Collector, err error, collectors []collector.Collector) []collector.Collector {
@@ -59,12 +63,8 @@ func storeCollector(collector collector.Collector, err error, collectors []colle
 func initCollectors(config *config.Config) []collector.Collector {
 	collectors := []collector.Collector{}
 	if config.Cluster {
-		collector, err := collector.NewClusterCollector(&collector.ClusterOpts{Kubeconfig: config.Kubeconfig, KubeContext: config.Context}, config.AdditionalKinds, generateUserAgent())
-		collectors = storeCollector(collector, err, collectors)
-	}
-
-	if config.Helm2 {
-		collector, err := collector.NewHelmV2Collector(&collector.HelmV2Opts{Kubeconfig: config.Kubeconfig, KubeContext: config.Context}, generateUserAgent())
+		collector, err := collector.NewClusterCollector(&collector.ClusterOpts{Kubeconfig: config.Kubeconfig, KubeContext: config.Context},
+			config.AdditionalKinds, config.AdditionalAnnotations, generateUserAgent())
 		collectors = storeCollector(collector, err, collectors)
 	}
 
@@ -88,7 +88,6 @@ func getServerVersion(cv *judge.Version, collectors []collector.Collector) (*jud
 				if err != nil {
 					return nil, fmt.Errorf("failed to detect k8s version: %w", err)
 				}
-
 				return version, nil
 			}
 		}
@@ -99,7 +98,7 @@ func getServerVersion(cv *judge.Version, collectors []collector.Collector) (*jud
 func main() {
 	exitCode := EXIT_CODE_FAIL_GENERIC
 
-	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+	configureGlobalLogging()
 
 	config, err := config.NewFromFlags()
 	if err != nil {
@@ -119,12 +118,15 @@ func main() {
 	log.Info().Msg("Initializing collectors and retrieving data")
 	initCollectors := initCollectors(config)
 
-	config.TargetVersion, err = getServerVersion(config.TargetVersion, initCollectors)
+	config.TargetVersion, _ = getServerVersion(config.TargetVersion, initCollectors)
 	if config.TargetVersion != nil {
 		log.Info().Msgf("Target K8s version is %s", config.TargetVersion.String())
 	}
 
-	collectors := getCollectors(initCollectors)
+	collectors, err := getCollectors(initCollectors)
+	if err != nil {
+		os.Exit(EXIT_CODE_FAIL_GET_COLLECTORS)
+	}
 
 	// this could probably use some error checking in future, but
 	// schema.ParseKindArg does not return any error
@@ -154,14 +156,9 @@ func main() {
 		log.Fatal().Err(err).Str("name", "Rego").Msg("Failed to filter results")
 	}
 
-	printer, err := printer.NewPrinter(config.Output)
+	err = outputResults(results, config.Output, config.OutputFile)
 	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to create printer")
-	}
-
-	err = printer.Print(results)
-	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to print results")
+		log.Fatal().Err(err).Msgf("Failed to output results")
 	}
 
 	if config.ExitError && len(results) > 0 {
@@ -170,4 +167,30 @@ func main() {
 		exitCode = EXIT_CODE_SUCCESS
 	}
 	os.Exit(exitCode)
+}
+
+func configureGlobalLogging() {
+	// disable any logging from K8S go-client
+	// unfortunately restConfig.WarningHandler does not handle auth plugins
+	klog.SetOutput(io.Discard)
+	flags := &flag.FlagSet{}
+	klog.InitFlags(flags)
+	flags.Set("logtostderr", "false")
+
+	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+}
+
+func outputResults(results []judge.Result, outputType string, outputFile string) error {
+	printer, err := printer.NewPrinter(outputType, outputFile)
+	if err != nil {
+		return fmt.Errorf("failed to create printer: %v", err)
+	}
+	defer printer.Close()
+
+	err = printer.Print(results)
+	if err != nil {
+		return fmt.Errorf("failed to print results: %v", err)
+	}
+
+	return nil
 }

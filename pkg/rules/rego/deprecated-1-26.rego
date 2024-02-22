@@ -1,4 +1,4 @@
-package deprecated125
+package deprecated126
 
 main[return] {
 	resource := input[_]
@@ -10,7 +10,7 @@ main[return] {
 		"Kind": resource.kind,
 		"ApiVersion": api.old,
 		"ReplaceWith": api.new,
-		"RuleSet": "Deprecated APIs removed in 1.25",
+		"RuleSet": "Deprecated APIs removed in 1.26",
 		"Since": api.since,
 	}
 }
@@ -21,35 +21,20 @@ deprecated_resource(r) = api {
 
 deprecated_api(kind, api_version) = api {
 	deprecated_apis = {
-		"RuntimeClass": {
-			"old": ["node.k8s.io/v1beta1"],
-			"new": "node.k8s.io/v1",
-			"since": "1.20",
-		},
-		"PodDisruptionBudget": {
-			"old": ["policy/v1beta1"],
-			"new": "policy/v1",
-			"since": "1.21",
-		},
-		"PodSecurityPolicy": {
-			"old": ["policy/v1beta1"],
-			"new": "<removed>",
-			"since": "1.21",
-		},
-		"EndpointSlice": {
-			"old": ["discovery.k8s.io/v1beta1"],
-			"new": "discovery.k8s.io/v1",
-			"since": "1.21",
-		},
-		"CronJob": {
-			"old": ["batch/v1beta1"],
-			"new": "batch/v1",
-			"since": "1.21",
-		},
 		"HorizontalPodAutoscaler": {
-			"old": ["autoscaling/v2beta1"],
+			"old": ["autoscaling/v2beta2"],
 			"new": "autoscaling/v2",
 			"since": "1.23",
+		},
+		"FlowSchema": {
+			"old": ["flowcontrol.apiserver.k8s.io/v1beta1"],
+			"new": "flowcontrol.apiserver.k8s.io/v1beta3",
+			"since": "1.26",
+		},
+		"PriorityLevelConfiguration": {
+			"old": ["flowcontrol.apiserver.k8s.io/v1beta1"],
+			"new": "flowcontrol.apiserver.k8s.io/v1beta3",
+			"since": "1.26",
 		},
 	}
 

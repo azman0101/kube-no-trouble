@@ -1,6 +1,7 @@
 package collector
 
 import (
+	"context"
 	"encoding/json"
 
 	"github.com/rs/zerolog/log"
@@ -17,8 +18,9 @@ const CLUSTER_COLLECTOR_NAME = "Cluster"
 type ClusterCollector struct {
 	*commonCollector
 	*kubeCollector
-	clientSet           dynamic.Interface
-	additionalResources []schema.GroupVersionResource
+	clientSet             dynamic.Interface
+	additionalResources   []schema.GroupVersionResource
+	additionalAnnotations []string
 }
 
 type ClusterOpts struct {
@@ -28,15 +30,17 @@ type ClusterOpts struct {
 	DiscoveryClient discovery.DiscoveryInterface
 }
 
-func NewClusterCollector(opts *ClusterOpts, additionalKinds []string, userAgent string) (*ClusterCollector, error) {
+func NewClusterCollector(opts *ClusterOpts, additionalKinds []string, additionalAnnotations []string, userAgent string) (
+	*ClusterCollector, error) {
 	kubeCollector, err := newKubeCollector(opts.Kubeconfig, opts.KubeContext, opts.DiscoveryClient, userAgent)
 	if err != nil {
 		return nil, err
 	}
 
 	collector := &ClusterCollector{
-		kubeCollector:   kubeCollector,
-		commonCollector: newCommonCollector(CLUSTER_COLLECTOR_NAME),
+		kubeCollector:         kubeCollector,
+		commonCollector:       newCommonCollector(CLUSTER_COLLECTOR_NAME),
+		additionalAnnotations: additionalAnnotations,
 	}
 
 	if opts.ClientSet == nil {
@@ -73,12 +77,13 @@ func (c *ClusterCollector) Get() ([]map[string]interface{}, error) {
 		schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "statefulsets"},
 		schema.GroupVersionResource{Group: "networking.k8s.io", Version: "v1", Resource: "networkpolicies"},
 		schema.GroupVersionResource{Group: "policy", Version: "v1beta1", Resource: "podsecuritypolicies"},
-		schema.GroupVersionResource{Group: "extensions", Version: "v1beta1", Resource: "ingresses"},
+		schema.GroupVersionResource{Group: "networking.k8s.io", Version: "v1", Resource: "ingresses"},
 		schema.GroupVersionResource{Group: "networking.k8s.io", Version: "v1", Resource: "ingressclasses"},
 		schema.GroupVersionResource{Group: "storage.k8s.io", Version: "v1", Resource: "csidrivers"},
 		schema.GroupVersionResource{Group: "storage.k8s.io", Version: "v1", Resource: "csinodes"},
 		schema.GroupVersionResource{Group: "storage.k8s.io", Version: "v1", Resource: "storageclasses"},
 		schema.GroupVersionResource{Group: "storage.k8s.io", Version: "v1", Resource: "volumeattachments"},
+		schema.GroupVersionResource{Group: "storage.k8s.io", Version: "v1", Resource: "csistoragecapacities"},
 		schema.GroupVersionResource{Group: "scheduling.k8s.io", Version: "v1", Resource: "priorityclasses"},
 		schema.GroupVersionResource{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "clusterroles"},
 		schema.GroupVersionResource{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "clusterrolebindings"},
@@ -99,9 +104,14 @@ func (c *ClusterCollector) Get() ([]map[string]interface{}, error) {
 		schema.GroupVersionResource{Group: "policy", Version: "v1beta1", Resource: "podsecuritypolicies"},
 		schema.GroupVersionResource{Group: "discovery.k8s.io", Version: "v1", Resource: "endpointslices"},
 		schema.GroupVersionResource{Group: "batch", Version: "v1", Resource: "cronjobs"},
+		schema.GroupVersionResource{Group: "autoscaling", Version: "v2", Resource: "horizontalpodautoscalers"},
 		schema.GroupVersionResource{Group: "snapshot.storage.k8s.io", Version: "v1", Resource: "volumesnapshots"},
 		schema.GroupVersionResource{Group: "snapshot.storage.k8s.io", Version: "v1", Resource: "volumesnapshotclasses"},
 		schema.GroupVersionResource{Group: "snapshot.storage.k8s.io", Version: "v1", Resource: "volumesnapshotcontents"},
+		schema.GroupVersionResource{Group: "flowcontrol.apiserver.k8s.io", Version: "v1beta2", Resource: "flowschemas"},
+		schema.GroupVersionResource{Group: "flowcontrol.apiserver.k8s.io", Version: "v1beta2", Resource: "prioritylevelconfigurations"},
+		schema.GroupVersionResource{Group: "flowcontrol.apiserver.k8s.io", Version: "v1beta3", Resource: "flowschemas"},
+		schema.GroupVersionResource{Group: "flowcontrol.apiserver.k8s.io", Version: "v1beta3", Resource: "prioritylevelconfigurations"},
 	}
 	gvrs = append(gvrs, c.additionalResources...)
 
@@ -109,14 +119,14 @@ func (c *ClusterCollector) Get() ([]map[string]interface{}, error) {
 	for _, g := range gvrs {
 		ri := c.clientSet.Resource(g)
 		log.Debug().Msgf("Retrieving: %s.%s.%s", g.Resource, g.Version, g.Group)
-		rs, err := ri.List(metav1.ListOptions{})
+		rs, err := ri.List(context.Background(), metav1.ListOptions{})
 		if err != nil {
 			log.Debug().Msgf("Failed to retrieve: %s: %s", g, err)
 			continue
 		}
 
 		for _, r := range rs.Items {
-			if jsonManifest, ok := r.GetAnnotations()["kubectl.kubernetes.io/last-applied-configuration"]; ok {
+			if jsonManifest, ok := c.getLastAppliedConfig(r.GetAnnotations()); ok {
 				var manifest map[string]interface{}
 
 				err := json.Unmarshal([]byte(jsonManifest), &manifest)
@@ -130,4 +140,15 @@ func (c *ClusterCollector) Get() ([]map[string]interface{}, error) {
 	}
 
 	return results, nil
+}
+
+func (c *ClusterCollector) getLastAppliedConfig(resourceAnnotations map[string]string) (string, bool) {
+	annotations := append([]string{"kubectl.kubernetes.io/last-applied-configuration"}, c.additionalAnnotations...)
+	for _, annotation := range annotations {
+		if jsonManifest, ok := resourceAnnotations[annotation]; ok {
+			return jsonManifest, ok
+		}
+	}
+
+	return "", false
 }
