@@ -7,7 +7,7 @@ require (
 	github.com/hashicorp/go-version v1.6.0
 	github.com/open-policy-agent/opa v0.60.0
 	github.com/rs/zerolog v1.30.0
-	github.com/spf13/pflag v1.0.5
+	github.com/spf13/pflag v1.0.10
 	helm.sh/helm/v3 v3.13.3
 	k8s.io/apimachinery v0.28.4
 	k8s.io/client-go v0.28.4
